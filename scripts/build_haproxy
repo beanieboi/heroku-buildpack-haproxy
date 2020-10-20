@@ -1,0 +1,41 @@
+#!/bin/bash
+# Build haproxy for Heroku.
+# This script is designed to run in a Heroku Stack Docker
+# image. More information on the Heroku Stack can be found
+# at https://devcenter.heroku.com/articles/stack
+
+HAPROXY_MAJOR_VERSION=${HAPROXY_VERSION-2.2}
+HAPROXY_VERSION=${HAPROXY_VERSION-2.2.4}
+
+haproxy_tarball_url=https://www.haproxy.org/download/${HAPROXY_MAJOR_VERSION}/src/haproxy-${HAPROXY_VERSION}.tar.gz
+
+temp_dir=$(mktemp -d /tmp/haproxy.XXXXXXXXXX)
+
+cd $temp_dir
+echo "Temp dir: $temp_dir"
+
+echo "Downloading $haproxy_tarball_url"
+curl -L $haproxy_tarball_url | tar xzv
+
+mkdir /tmp/haproxy
+
+# This will build `haproxy`
+(
+  cd haproxy-${HAPROXY_VERSION}
+  make -j $(nproc) \
+  TARGET=linux-glibc \
+  USE_OPENSSL=1 \
+  USE_ZLIB=1 \
+  USE_PCRE=1 \
+  PREFIX=/tmp/haproxy \
+  all
+
+  make DESTDIR=/tmp/haproxy install-bin
+)
+
+release_dir=$(mktemp -d /tmp/haproxy.XXXXXXXXXX)
+
+ls -lisha /tmp/haproxy
+cp /tmp/haproxy/usr/local/sbin/haproxy $release_dir/haproxy
+tar -zcvf /tmp/haproxy-"${STACK}".tgz -C $release_dir .
+cp /tmp/haproxy-"${STACK}".tgz $1

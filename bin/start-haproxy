@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+psmgr=/tmp/haproxy-buildpack-wait
+rm -f $psmgr
+mkfifo $psmgr
+
+n=1
+while getopts :f option ${@:1:2}
+do
+  case "${option}"
+  in
+    f) FORCE=$OPTIND; n=$((n+1));;
+  esac
+done
+
+# Initialize log directory.
+mkdir -p logs/haproxy
+touch logs/haproxy/access.log logs/haproxy/error.log
+echo 'buildpack=haproxy at=logs-initialized'
+
+# Start log redirection.
+(
+  # Redirect haproxy logs to stdout.
+  tail -qF -n 0 logs/haproxy/*.log
+  echo 'logs' >$psmgr
+) &
+
+# Start haproxy
+(
+  # We expect haproxy to run in foreground.
+  # We also expect a socket to be at /tmp/haproxy.socket.
+  echo 'buildpack=haproxy at=haproxy-start'
+  bin/haproxy -f config/haproxy.cfg
+  echo 'haproxy' >$psmgr
+) &
+
+# This read will block the process waiting on a msg to be put into the fifo.
+# If any of the processes defined above should exit,
+# a msg will be put into the fifo causing the read operation
+# to un-block. The process putting the msg into the fifo
+# will use it's process name as a msg so that we can print the offending
+# process to stdout.
+read exit_process <$psmgr
+echo "buildpack=haproxy at=exit process=$exit_process"
+exit 1

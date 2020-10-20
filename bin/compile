@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -e
+
+# clean up leaking environment
+unset GIT_DIR
+
+# parse and derive params
+BUILD_DIR=$1
+CACHE_DIR=$2
+BUILDPACK_DIR="$(dirname "$(dirname "$0")")"
+
+mkdir -p "$BUILD_DIR/bin/"
+mkdir -p "$BUILD_DIR/haproxy"
+tar -zxvf "haproxy-$STACK".tgz -C "$BUILD_DIR/haproxy"
+
+cp "$BUILD_DIR/haproxy/haproxy" "$BUILD_DIR/bin/haproxy"
+
+haproxy_version=$($BUILD_DIR/bin/haproxy -V 2>&1 | head -1 | awk '{ print $(NF-3) }')
+echo "-----> haproxy-buildpack: Installed ${haproxy_version} to app/bin"
+cp bin/start-haproxy "$BUILD_DIR/bin/"
+echo '-----> haproxy-buildpack: Added start-haproxy to app/bin'
+
+mkdir -p "$BUILD_DIR/config"
+
+if [[ ! -f $BUILD_DIR/config/haproxy.cfg ]]; then
+  cp config/haproxy.cfg "$BUILD_DIR/config/"
+  echo '-----> haproxy-buildpack: Default config copied to app/config.'
+else
+  echo '-----> haproxy-buildpack: Custom config found in app/config.'
+fi
+
+# cleanup
+rm -r "$BUILD_DIR/haproxy"
+
+exit 0
